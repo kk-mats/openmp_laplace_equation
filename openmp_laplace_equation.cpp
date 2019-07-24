@@ -30,7 +30,14 @@ public:
 
 				if(!included)
 				{
-					this->mask_.emplace_back(x, y);
+					if((x+y)%2==0)
+					{
+						this->even_mask_.emplace_back(x, y);
+					}
+					else
+					{
+						this->odd_mask_.emplace_back(x, y);
+					}
 				}
 			}
 		}
@@ -40,27 +47,35 @@ public:
 	{
 		const auto start=std::chrono::system_clock::now();
 
-		const float min_delta=std::pow(10, -5);
+		const float min_delta=std::pow(10, -7);
 		float max_delta;
-		std::vector<float> delta(this->mask_.size());
+		std::vector<float> odd_delta(this->odd_mask_.size());
+		std::vector<float> even_delta(this->even_mask_.size());
 
-		std::vector<std::vector<float>> prev;
 		int ctr=0;
 
 		do
 		{
-			prev=this->buffer_;
 #pragma omp parallel for
-			for(int i=0; i<this->mask_.size(); ++i)
+			for(int i=0; i<this->even_mask_.size(); ++i)
 			{
-				const auto [x, y]=this->mask_[i];
-				this->buffer_[y][x]=(prev[y-1][x]+prev[y+1][x]+prev[y][x-1]+prev[y][x+1])/4;
-				delta[i]=std::abs(this->buffer_[y][x]-prev[y][x])/100;
+				const auto [x, y]=this->even_mask_[i];
+				const auto prev=this->buffer_[y][x];
+				this->buffer_[y][x]=(this->buffer_[y-1][x]+this->buffer_[y+1][x]+this->buffer_[y][x-1]+this->buffer_[y][x+1])/4;
+				even_delta[i]=std::abs(this->buffer_[y][x]-prev)/100;
 			}
 
-			max_delta=*std::max_element(std::execution::par_unseq, delta.begin(), delta.end());
+#pragma omp parallel for
+			for(int i=0; i<this->odd_mask_.size(); ++i)
+			{
+				const auto [x, y]=this->odd_mask_[i];
+				const auto prev=this->buffer_[y][x];
+				this->buffer_[y][x]=(this->buffer_[y-1][x]+this->buffer_[y+1][x]+this->buffer_[y][x-1]+this->buffer_[y][x+1])/4;
+				odd_delta[i]=std::abs(this->buffer_[y][x]-prev)/100;
+			}
+			max_delta=std::max(*std::max_element(std::execution::par_unseq, even_delta.begin(), even_delta.end()), *std::max_element(std::execution::par_unseq, odd_delta.begin(), odd_delta.end()));
 
-			if(ctr%100==0)
+			if(ctr%1000==0)
 			{
 				std::cout<<"loop: "<<ctr<<", delta="<<max_delta<<std::endl;
 			}
@@ -81,7 +96,7 @@ public:
 private:
 	const int h_;
 	std::vector<std::vector<float>> buffer_;
-	std::vector<std::pair<int, int>> mask_;
+	std::vector<std::pair<int, int>> even_mask_, odd_mask_;
 
 	class circle
 	{
